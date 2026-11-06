@@ -1,0 +1,36 @@
+services:
+  bluetooth-scan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bluetooth-scan:local
+    container_name: bluetooth-scan
+    working_dir: /app
+    volumes:
+      # Live source + cargo cache so rebuilds stay fast
+      - ./:/app
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/target
+    environment:
+      - RUST_BACKTRACE=1
+      - CARGO_TERM_COLOR=always
+      - PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    # On Windows Docker Desktop, Bluetooth hardware is usually not available
+    # inside the container. Use `cargo run` on the host for real BLE scans + UI.
+    stdin_open: true
+    tty: true
+    # Keep deps ready; override as needed:
+    #   docker compose run --rm bluetooth-scan cargo build --release
+    #   docker compose exec bluetooth-scan cargo run --release
+    command:
+      [
+        "bash",
+        "-c",
+        "cargo build --release && echo 'Dependencies installed. Container ready.' && sleep infinity",
+      ]
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  cargo-target:

@@ -1,0 +1,17 @@
+[package]
+name = "bluetooth-scan"
+version = "0.1.0"
+edition = "2021"
+description = "Simple Bluetooth LE scanner with a desktop UI"
+license = "MIT"
+
+[dependencies]
+eframe = "0.31"
+egui = "0.31"
+btleplug = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+futures = "0.3"
+uuid = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
