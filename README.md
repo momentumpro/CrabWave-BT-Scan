@@ -1,6 +1,6 @@
-# Bluetooth Scan
+# CrabWave
 
-Desktop BLE scanner written in Rust. Scans nearby Bluetooth Low Energy devices and shows name, MAC address, signal strength, and optional OUI vendor lookup.
+Rust desktop BLE scanner. Finds nearby Bluetooth Low Energy devices and shows name, MAC address, signal strength, and optional OUI vendor lookup.
 
 ## Main features
 
@@ -30,6 +30,17 @@ cargo run --release
 ```
 
 Turn Bluetooth on before scanning. On Windows this is the recommended way to use the app (UI + radio access).
+
+## GitHub Releases
+
+Pushing a version tag builds a Windows executable and attaches it to a GitHub Release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow (`.github/workflows/release.yml`) uploads `CrabWave-windows-x64.exe` to that release.
 
 ## Docker
 

@@ -108,7 +108,7 @@ impl BluetoothScanApp {
 
         Self {
             devices: HashMap::new(),
-            status: "Ready. Press Scan to discover nearby BLE devices.".into(),
+            status: "Ready.".into(),
             scanning: false,
             only_strong: false,
             strong_rssi_min: -70,
@@ -126,7 +126,7 @@ impl BluetoothScanApp {
 
         self.scanning = true;
         self.devices.clear();
-        self.status = "Scanning… names often arrive in later advertisement updates.".into();
+        self.status = "Scanning…".into();
         *self.stop_flag.lock().unwrap() = false;
 
         let tx = self.event_tx.clone();
@@ -142,7 +142,7 @@ impl BluetoothScanApp {
 
     fn stop_scan(&mut self) {
         *self.stop_flag.lock().unwrap() = true;
-        self.status = "Stopping scan…".into();
+        self.status = "Stopping…".into();
     }
 
     fn lookup_oui(&mut self, address: String) {
@@ -202,7 +202,7 @@ impl BluetoothScanApp {
                             .filter(|d| !d.name.starts_with("(unnamed"))
                             .count();
                         self.status = format!(
-                            "Scan finished. {} device(s), {} with a name.",
+                            "Done — {} device(s), {} named.",
                             self.devices.len(),
                             named
                         );
@@ -238,9 +238,7 @@ async fn run_scan(
         .adapter_info()
         .await
         .unwrap_or_else(|_| "local adapter".into());
-    let _ = tx.send(UiEvent::Status(format!(
-        "Using adapter: {info}. Scanning for 18s…"
-    )));
+    let _ = tx.send(UiEvent::Status(format!("Scanning… ({info})")));
 
     // Subscribe before start_scan so we don't miss early advertisements.
     let mut events = adapter
@@ -364,7 +362,7 @@ async fn fetch_oui_vendor(mac: &str) -> Result<String, String> {
     let url = format!("https://api.maclookup.app/v2/macs/{normalized}");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(12))
-        .user_agent("bluetooth-scan/0.1")
+        .user_agent("crabwave/0.1")
         .build()
         .map_err(|e| format!("Could not create HTTP client: {e}"))?;
 
@@ -617,11 +615,13 @@ impl eframe::App for BluetoothScanApp {
         let mut copied_mac: Option<String> = None;
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Bluetooth Scan");
-            ui.label(
-                "Many BLE devices omit a name at first; it updates as more advertisements arrive. Detect vendor looks up the OUI via api.maclookup.app.",
-            );
-            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                paint_logo(ui, 28.0);
+                ui.heading(
+                    egui::RichText::new("CrabWave").strong().size(22.0),
+                );
+            });
+            ui.add_space(6.0);
 
             ui.horizontal(|ui| {
                 if ui
@@ -638,23 +638,19 @@ impl eframe::App for BluetoothScanApp {
                     self.stop_scan();
                 }
 
-                if ui.button("Clear list").clicked() {
+                if ui.button("Clear").clicked() {
                     self.devices.clear();
                 }
 
                 ui.separator();
                 ui.checkbox(
                     &mut self.only_strong,
-                    format!("Nearby only (≥ {} dBm)", self.strong_rssi_min),
+                    format!("Nearby (≥ {} dBm)", self.strong_rssi_min),
                 );
             });
 
             ui.add_space(6.0);
             ui.label(&self.status);
-            ui.colored_label(
-                egui::Color32::DARK_GRAY,
-                "Sorted by signal strength (RSSI). Higher (less negative) ≈ closer. Not exact meters.",
-            );
             ui.separator();
 
             egui::ScrollArea::vertical()
@@ -673,7 +669,7 @@ impl eframe::App for BluetoothScanApp {
                             ui.strong("MAC");
                             ui.strong("");
                             ui.strong("RSSI");
-                            ui.strong("OUI / API");
+                            ui.strong("Vendor");
                             ui.strong("");
                             ui.end_row();
 
@@ -694,18 +690,13 @@ impl eframe::App for BluetoothScanApp {
                             }
 
                             for (rank, device) in rows.into_iter().enumerate() {
-                                let rank_label = match rank {
-                                    0 => "1 · closest".to_string(),
-                                    n => format!("{}", n + 1),
-                                };
-                                ui.label(rank_label);
+                                ui.label(format!("{}", rank + 1));
                                 ui.label(&device.name);
                                 ui.label(&device.device_type);
 
                                 let prox = proximity_label(device.rssi);
                                 ui.colored_label(rssi_color(device.rssi), prox);
 
-                                // Click MAC text or the Copy button to copy.
                                 let mac_response = ui
                                     .add(
                                         egui::Label::new(
@@ -713,16 +704,12 @@ impl eframe::App for BluetoothScanApp {
                                         )
                                         .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text("Click to copy MAC");
+                                    .on_hover_text("Copy MAC");
                                 if mac_response.clicked() {
                                     copied_mac = Some(device.address.clone());
                                 }
 
-                                if ui
-                                    .small_button("Copy")
-                                    .on_hover_text("Copy MAC to clipboard")
-                                    .clicked()
-                                {
+                                if ui.small_button("Copy").clicked() {
                                     copied_mac = Some(device.address.clone());
                                 }
 
@@ -735,7 +722,7 @@ impl eframe::App for BluetoothScanApp {
                                 );
 
                                 let oui_text = match (&device.oui_state, &device.oui_vendor) {
-                                    (OuiLookupState::Loading, _) => "Looking up…".into(),
+                                    (OuiLookupState::Loading, _) => "…".into(),
                                     (_, Some(v)) => v.clone(),
                                     (OuiLookupState::Idle, None) => "—".into(),
                                     _ => "—".into(),
@@ -746,13 +733,10 @@ impl eframe::App for BluetoothScanApp {
                                 let label = match device.oui_state {
                                     OuiLookupState::Done => "Refresh",
                                     OuiLookupState::Failed => "Retry",
-                                    _ => "Detect vendor",
+                                    _ => "Vendor",
                                 };
                                 if ui
                                     .add_enabled(!busy, egui::Button::new(label))
-                                    .on_hover_text(
-                                        "Queries https://api.maclookup.app with the MAC OUI prefix",
-                                    )
                                     .clicked()
                                 {
                                     pending_lookup = Some(device.address.clone());
@@ -774,16 +758,127 @@ impl eframe::App for BluetoothScanApp {
     }
 }
 
+fn paint_logo(ui: &mut egui::Ui, size: f32) {
+    let (rect, _response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    let painter = ui.painter();
+    let center = rect.center();
+    let r = size * 0.42;
+
+    // Soft blue “wave” disc
+    painter.circle_filled(center, r, egui::Color32::from_rgb(36, 120, 190));
+    painter.circle_stroke(
+        center,
+        r,
+        egui::Stroke::new(1.2_f32, egui::Color32::from_rgb(20, 80, 140)),
+    );
+
+    // Orange crab body
+    let crab = egui::Color32::from_rgb(230, 110, 45);
+    painter.circle_filled(center + egui::vec2(0.0, 1.0), r * 0.38, crab);
+
+    // Claws
+    painter.circle_filled(center + egui::vec2(-r * 0.55, -r * 0.15), r * 0.16, crab);
+    painter.circle_filled(center + egui::vec2(r * 0.55, -r * 0.15), r * 0.16, crab);
+
+    // Eyes
+    let eye = egui::Color32::from_rgb(30, 30, 30);
+    painter.circle_filled(center + egui::vec2(-r * 0.14, -r * 0.08), r * 0.07, eye);
+    painter.circle_filled(center + egui::vec2(r * 0.14, -r * 0.08), r * 0.07, eye);
+
+    // Wave arcs
+    let wave = egui::Color32::from_rgb(180, 220, 255);
+    for (dy, rx) in [(-0.55, 0.55), (0.62, 0.62)] {
+        painter.line_segment(
+            [
+                center + egui::vec2(-r * rx * 0.7, r * dy),
+                center + egui::vec2(0.0, r * dy + r * 0.08),
+            ],
+            egui::Stroke::new(1.4_f32, wave),
+        );
+        painter.line_segment(
+            [
+                center + egui::vec2(0.0, r * dy + r * 0.08),
+                center + egui::vec2(r * rx * 0.7, r * dy),
+            ],
+            egui::Stroke::new(1.4_f32, wave),
+        );
+    }
+}
+
+fn app_icon() -> egui::IconData {
+    const SIZE: usize = 48;
+    let mut rgba = vec![0u8; SIZE * SIZE * 4];
+
+    let put = |rgba: &mut [u8], x: i32, y: i32, c: [u8; 4]| {
+        if x < 0 || y < 0 || x >= SIZE as i32 || y >= SIZE as i32 {
+            return;
+        }
+        let i = ((y as usize) * SIZE + x as usize) * 4;
+        rgba[i..i + 4].copy_from_slice(&c);
+    };
+
+    let cx = (SIZE / 2) as f32;
+    let cy = (SIZE / 2) as f32;
+    let blue = [36u8, 120, 190, 255];
+    let crab = [230u8, 110, 45, 255];
+    let eye = [30u8, 30, 30, 255];
+    let wave = [180u8, 220, 255, 255];
+
+    for y in 0..SIZE as i32 {
+        for x in 0..SIZE as i32 {
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let d = (dx * dx + dy * dy).sqrt();
+
+            if d <= 22.0 {
+                put(&mut rgba, x, y, blue);
+            }
+            // crab body
+            if (dx * dx + (dy - 1.0) * (dy - 1.0)).sqrt() <= 9.0 {
+                put(&mut rgba, x, y, crab);
+            }
+            // claws
+            if ((dx + 12.0).powi(2) + (dy + 2.0).powi(2)).sqrt() <= 4.0 {
+                put(&mut rgba, x, y, crab);
+            }
+            if ((dx - 12.0).powi(2) + (dy + 2.0).powi(2)).sqrt() <= 4.0 {
+                put(&mut rgba, x, y, crab);
+            }
+            // eyes
+            if ((dx + 3.5).powi(2) + (dy + 1.0).powi(2)).sqrt() <= 1.6 {
+                put(&mut rgba, x, y, eye);
+            }
+            if ((dx - 3.5).powi(2) + (dy + 1.0).powi(2)).sqrt() <= 1.6 {
+                put(&mut rgba, x, y, eye);
+            }
+            // wave dashes
+            if (dy - 12.0).abs() < 1.2 && dx.abs() < 14.0 && (dx as i32).abs() % 5 < 3 {
+                put(&mut rgba, x, y, wave);
+            }
+            if (dy + 14.0).abs() < 1.2 && dx.abs() < 16.0 && (dx as i32).abs() % 5 < 3 {
+                put(&mut rgba, x, y, wave);
+            }
+        }
+    }
+
+    egui::IconData {
+        rgba,
+        width: SIZE as u32,
+        height: SIZE as u32,
+    }
+}
+
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1100.0, 560.0])
-            .with_title("Bluetooth Scan"),
+            .with_title("CrabWave")
+            .with_icon(app_icon()),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Bluetooth Scan",
+        "CrabWave",
         options,
         Box::new(|cc| Ok(Box::new(BluetoothScanApp::new(cc)))),
     )

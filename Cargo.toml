@@ -2,7 +2,7 @@
 name = "bluetooth-scan"
 version = "0.1.0"
 edition = "2021"
-description = "Simple Bluetooth LE scanner with a desktop UI"
+description = "CrabWave — Rust desktop BLE scanner"
 license = "MIT"
 
 [dependencies]
